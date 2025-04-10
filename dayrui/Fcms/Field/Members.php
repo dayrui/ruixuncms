@@ -4,7 +4,8 @@
  * {{迅睿内容管理框架系统}}
  * 本文件是框架系统文件，二次开发时不可以修改本文件，可以通过继承类方法来重写此文件
  **/
-class Related extends \Phpcmf\Library\A_Field {
+
+class Members extends \Phpcmf\Library\A_Field {
 	
 	/**
      * 构造函数
@@ -22,38 +23,14 @@ class Related extends \Phpcmf\Library\A_Field {
 	 * @return  string
 	 */
 	public function option($option) {
-	
-		$_option = '';
-		$_module = \Phpcmf\Service::C()->get_cache('module-'.SITE_ID.'-content');
-		if ($_module) {
-			foreach ($_module as $dir => $t) {
-				$_option.= '<option value="'.$dir.'" '.($dir == $option['module'] ? 'selected' : '').'>'.$t['name'].'</option>';
-			}
-		}
-		
-		return [$this->_search_field().'<div class="form-group">
-                    <label class="col-md-2 control-label">'.dr_lang('内容模块').'</label>
-                    <div class="col-md-9">
-                    <label><select class="form-control" name="data[setting][option][module]">
-					'.$_option.'
-					</select></label>
-					<span class="help-block">'.dr_lang('必须选择一个模块作为关联数据源').'</span>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="col-md-2 control-label">'.dr_lang('显示归属内容').'</label>
-                    <div class="col-md-9">
-                        <input type="checkbox" name="data[setting][option][my]" '.($option['my'] ? 'checked' : '').' value="1"  data-on-text="'.dr_lang('已开启').'" data-off-text="'.dr_lang('已关闭').'" data-on-color="success" data-off-color="danger" class="make-switch" data-size="small">
-                        <span class="help-block">'.dr_lang('开启之后只显示当前登录的用户自己所发布的内容').'</span>
-                    </div>
-                </div>
-				<div class="form-group">
-                    <label class="col-md-2 control-label">'.dr_lang('主题显示名称').'</label>
-                    <div class="col-md-9">
-                    <label><input type="text" class="form-control" size="10" name="data[setting][option][title]" value="'.($option['title'] ? $option['title'] : dr_lang('主题')).'"></label>
-					<span class="help-block">'.dr_lang('用于显示管理的主题字段名称，默认是：主题').'</span>
-                    </div>
-                </div>
+
+	    $group = '<div class="mt-checkbox-inline">';
+	    foreach (\Phpcmf\Service::C()->member_cache['group'] as $t) {
+            $group.= '<label class="mt-checkbox mt-checkbox-outline"><input type="checkbox" value="'.$t['id'].'" name="data[setting][option][group][]" '.(dr_in_array($t['id'], $option['group']) ? 'checked' : '').' /> '.dr_lang($t['name']).' <span></span></label>';
+        }
+	    $group.= '</div>';
+
+		return [$this->_search_field().'
 				<div class="form-group">
                     <label class="col-md-2 control-label">'.dr_lang('最大选择数').'</label>
                     <div class="col-md-9">
@@ -66,6 +43,13 @@ class Related extends \Phpcmf\Library\A_Field {
                     <div class="col-md-9">
                     <label><input type="text" class="form-control" size="10" name="data[setting][option][pagesize]" value="'.$option['pagesize'].'"></label>
 					<span class="help-block">'.dr_lang('选择列表分页条数，按多少条数据分页').'</span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="col-md-2 control-label">'.dr_lang('指定用户组').'</label>
+                    <div class="col-md-9">
+                    '.$group.'
+					<span class="help-block">'.dr_lang('列出指定用户组的用户列表，如果不选择时将显示全部用户').'</span>
                     </div>
                 </div>'];
 	}
@@ -83,14 +67,8 @@ class Related extends \Phpcmf\Library\A_Field {
 	public function insert_value($field) {
 		
 		$data = \Phpcmf\Service::L('Field')->post[$field['fieldname']];
-        $limit = intval($field['setting']['option']['limit']);
-        if ($limit && $data && count($data) > $limit) {
-            // 超限了
-            $value = implode(',', dr_arraycut($data, $limit));
-        } else {
-            $value = !$data ? '' : implode(',', $data);
-        }
-
+		$value = !$data ? '' : implode(',', $data);
+		
 		\Phpcmf\Service::L('Field')->data[$field['ismain']][$field['fieldname']] = $value;
 	}
 	
@@ -110,39 +88,21 @@ class Related extends \Phpcmf\Library\A_Field {
             return $this->show($field, $value);
         }
 
-        if (!IS_USE_MODULE) {
-            return '使用本字段类别需要安装【建站系统】插件';
-        }
-
         $is_show = 0;
 
         // 字段存储名称
         $name = $field['fieldname'];
 		// 字段提示信息
 		$tips = isset($field['setting']['validate']['tips']) && $field['setting']['validate']['tips'] ? '<span class="help-block" id="dr_'.$name.'_tips">'.$field['setting']['validate']['tips'].'</span>' : '';
+
 		// 区域大小
         $area = \Phpcmf\Service::IS_MOBILE_USER() ? '["95%", "90%"]' : '["50%", "65%"]';
-        // 模块名称
-		$module = $mid = isset($field['setting']['option']['module']) ? $field['setting']['option']['module'] : '';
-		// 字段显示名称
-        $text = ($field['setting']['validate']['required'] ? '<span class="required" aria-required="true"> * </span>' : '').dr_lang($field['name']);
+
         // 选择数量限制
         $limit = intval($field['setting']['option']['limit']);
         !$limit && $limit = 99999;
-        // 输出信息
-        $cname = ($field['setting']['option']['title'] ? $field['setting']['option']['title'] : dr_lang('主题'));
-
-        if (!$module) {
-            if (CI_DEBUG) {
-                return $this->input_format($name, $text, '<div class="form-control-static" style="color:red">关联字段没有设置关联模块</div>');
-            }
-            return $this->input_format($name, $text, '');
-        } elseif (!dr_is_module($module)) {
-            if (CI_DEBUG) {
-                return $this->input_format($name, $text, '<div class="form-control-static" style="color:red">关联字段设置的模块【'.$module.'】没有被安装</div>');
-            }
-            return $this->input_format($name, $text, '');
-        }
+        // 字段显示名称
+        $text = ($field['setting']['validate']['required'] ? '<span class="required" aria-required="true"> * </span>' : '').dr_lang($field['name']);
 
         $value = $value ? trim($value, ',') : '';
         $mylist = [];
@@ -153,32 +113,20 @@ class Related extends \Phpcmf\Library\A_Field {
                 foreach ($arr as $a) {
                     $a = intval($a);
                     if ($a) {
-                        $value.= ','.$a;
+                        $value .= ',' . $a;
                     }
                 }
                 if ($value) {
                     $value = trim($value, ',');
-                    $db = \Phpcmf\Service::M()->db->query('select id,title,catid,updatetime,uid,url from '.\Phpcmf\Service::M()->dbprefix(dr_module_table_prefix($module)).' where id IN ('.$value.') order by instr("'.$value.'", id)');
+                    $db = \Phpcmf\Service::M()->db->query('select * from '.\Phpcmf\Service::M()->dbprefix('member').' where id IN ('.$value.') order by FIELD(id, '.$value.')');
                     $mylist = $db ? $db->getResultArray() : [];
                 }
             }
 		}
 
-        $tpl = is_file(MYPATH.'View/api_related_field_'.$field['fieldname'].'.html') ? MYPATH.'View/api_related_field_'.$field['fieldname'].'.html' : COREPATH.'View/api_related_field.html';
-        if (!is_file($tpl)) {
-            if (CI_DEBUG) {
-                return $this->input_format($name, $text, '<div class="form-control-static" style="color:red">模板文件【'.$tpl.'】不存在</div>');
-            }
-            return $this->input_format($name, $text, '');
-        }
-        $code = file_get_contents($tpl);
-        if (!$code) {
-            if (CI_DEBUG) {
-                return $this->input_format($name, $text, '<div class="form-control-static" style="color:red">模板文件【'.$tpl.'】内容为空</div>');
-            }
-            return $this->input_format($name, $text, '');
-        }
-        $file = \Phpcmf\Service::V()->code2php($code);
+        $file = \Phpcmf\Service::V()->code2php(
+            file_get_contents(is_file(MYPATH.'View/api_members_field_'.$field['fieldname'].'.html') ? MYPATH.'View/api_members_field_'.$field['fieldname'].'.html' : COREPATH.'View/api_members_field.html')
+        );
         ob_start();
         require $file;
         $str = ob_get_clean();
@@ -187,19 +135,18 @@ class Related extends \Phpcmf\Library\A_Field {
         $js = \Phpcmf\Service::L('js_packer');
         $str.= $js->pack('
 		<script type="text/javascript">
-		
+        $("#rmember_'.$name.'-sort-items").sortable();
         dr_slimScroll_init(".scroller_'.$name.'_files", 300);
-        $("#related_'.$name.'-sort-items").sortable();
-		function dr_add_related_'.$name.'() {
-		    var len = $(\'#related_'.$name.'-sort-items tr\').length;
+		function dr_add_rmember_'.$name.'() {
+		    var len = $(\'#rmember_'.$name.'-sort-items tr\').length;
 		    if (len >= '.$limit.') {
 		        dr_tips(0, "'.dr_lang('关联数量超限').'");
 		        return;
 		    }
-		    var url = "'.dr_web_prefix('index.php?s=module&c=api&m=related&name=').$name.'&site='.SITE_ID.'&module='.$module.'&diy='.$field['fieldname'].'&my='.intval($field['setting']['option']['my']).'&pagesize='.intval($field['setting']['option']['pagesize']).'&is_iframe=1";
+		    var url = "/index.php?&is_iframe=1&s=member&c=api&m=members&name='.$name.'&diy='.$field['fieldname'].'&pagesize='.intval($field['setting']['option']['pagesize']).'&group='.($field['setting']['option']['group'] ? implode(',', $field['setting']['option']['group']) : '').'";
             layer.open({
                 type: 2,
-                title: \'<i class="fa fa-cog"></i> '.dr_lang('关联内容').'\',
+                title: \'<i class="fa fa-user"></i> '.dr_lang('关联用户').'\',
                 fix:true,
                 shadeClose: true,
                 shade: 0,
@@ -222,10 +169,6 @@ class Related extends \Phpcmf\Library\A_Field {
                             layer.close(loading);
                             if (json.code == 1) {
                                 layer.close(index);
-                                if (len + json.data.ids.length > '.$limit.') {
-                                    dr_tips(0, "'.dr_lang('关联数量超限').'");
-                                    return;
-                                }
                                 for(var i in json.data.ids){
                                     var vid = json.data.ids[i];
                                     if (typeof vid != "undefined") {
@@ -233,13 +176,13 @@ class Related extends \Phpcmf\Library\A_Field {
                                           dr_tips(0, "'.dr_lang('已经存在').'");
                                           return;
                                         }
-                                        if ($(\'#related_'.$name.'-sort-items tr\').length >= '.$limit.') {
+                                        if ($(\'#rmember_'.$name.'-sort-items tr\').length >= '.$limit.') {
                                             dr_tips(0, "'.dr_lang('关联数量超限').'");
                                             return;
                                         }
                                     }
                                 }
-                                 $(\'#related_'.$name.'-sort-items\').append(json.data.html);
+                                $(\'#rmember_'.$name.'-sort-items\').append(json.data.html);
                                 dr_slimScroll_init(".scroller_'.$name.'_files", 300);
                                 dr_tips(1, json.msg);
                             } else {
@@ -271,33 +214,29 @@ class Related extends \Phpcmf\Library\A_Field {
      */
     public function show($field, $value = null) {
 
-
-        $cname = ($field['setting']['option']['title'] ? $field['setting']['option']['title'] : dr_lang('主题'));
         $value = @trim($value, ',');
         $mylist = [];
         $is_show = 1;
-        $module = $mid = isset($field['setting']['option']['module']) ? $field['setting']['option']['module'] : '';
-        if ($value && is_string($value) && $module) {
+        if ($value && is_string($value)) {
             $arr = explode(',', $value);
             if ($arr) {
                 $value = '';
                 foreach ($arr as $a) {
                     $a = intval($a);
                     if ($a) {
-                        $value.= ','.$a;
+                        $value .= ',' . $a;
                     }
                 }
                 if ($value) {
                     $value = trim($value, ',');
-                    $db = \Phpcmf\Service::M()->db->query('select id,title,catid,updatetime,uid,url from '.\Phpcmf\Service::M()->dbprefix(dr_module_table_prefix($module)).' where id IN ('.$value.') order by instr("'.$value.'", id)');
+                    $db = \Phpcmf\Service::M()->db->query('select * from '.\Phpcmf\Service::M()->dbprefix('member').' where id IN ('.$value.') order by FIELD(id, '.$value.')');
                     $mylist = $db ? $db->getResultArray() : [];
                 }
             }
         }
 
-        $tpl = $field['fieldname'];
         $file = \Phpcmf\Service::V()->code2php(
-            file_get_contents(is_file(MYPATH.'View/api_related_field_'.$tpl.'.html') ? MYPATH.'View/api_related_field_'.$tpl.'.html' : COREPATH.'View/api_related_field.html')
+            file_get_contents(is_file(MYPATH.'View/api_members_field_'.$field['fieldname'].'.html') ? MYPATH.'View/api_members_field_'.$field['fieldname'].'.html' : COREPATH.'View/api_members_field.html')
         );
         ob_start();
         require $file;
@@ -305,4 +244,6 @@ class Related extends \Phpcmf\Library\A_Field {
 
         return $this->input_format($field['fieldname'], $field['name'], $str);
     }
+
+
 }
