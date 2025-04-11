@@ -1764,6 +1764,7 @@ return [
     '服务' => 'Service',
     '项目服务' => 'Project Services',
     '版本升级' => 'Version upgrade',
+    '本地磁盘' => 'Local Disk',
     '内容管理' => 'Content',
     '内容审核' => 'Content review',
     '创建菜单' => 'Create menu',
